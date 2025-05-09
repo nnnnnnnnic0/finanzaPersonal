@@ -1,0 +1,298 @@
+{% load humanize %}
+{% load clp_filters %}
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportes Financieros</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #categoryChart {
+            max-width: 500px;
+            /* Controla el tamaño máximo */
+            margin: 0 auto;
+            /* Centra el gráfico */
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Encabezado -->
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">Reportes Financieros</h1>
+
+        <!-- Sección de Resumen -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500">
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Ingresos</h3>
+                <p class="text-2xl font-bold text-gray-800">{{ total_income|clp_format }}</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-red-500">
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Gastos</h3>
+                <p class="text-2xl font-bold text-gray-800">{{ total_expense|clp_format }}</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500">
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Balance</h3>
+                <p class="text-2xl font-bold text-gray-800">{{ balance|clp_format }}</p>
+            </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Gráfico de Doughnut -->
+            <div class="bg-white p-6 rounded-lg shadow-sm">
+                <h2 class="text-xl font-semibold mb-4">Distribución de Gastos</h2>
+                <div class="h-64"> <!-- Altura fija para el canvas -->
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Gráfico de Líneas -->
+            <div class="bg-white p-6 rounded-lg shadow-sm">
+                <h2 class="text-xl font-semibold mb-4">Tendencias Mensuales</h2>
+                <div class="h-64">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm">
+            <h2 class="text-xl font-semibold mb-4">Tendencias Diarias (Últimos 30 Días)</h2>
+            <div class="h-96">
+                <canvas id="dailyTrendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Scripts de gráficos -->
+        {{ expense_categories|json_script:"expense-data" }}
+        {{ monthly_trends|json_script:"trend-data" }}
+        {{ daily_trends_json|json_script:"daily-trend-data" }}
+
+        <script>
+            // Gráfico de tendencias (Líneas)
+            const trendData = JSON.parse(document.getElementById('trend-data').textContent);
+
+            if (!trendData || trendData.length === 0) {
+                console.error('No hay datos de tendencias');
+            } else {
+                // Gráfico de categorías (Doughnut)
+                const expenseData = JSON.parse(document.getElementById('expense-data').textContent);
+                const categoryLabels = expenseData.map(item => item.categoria__name);
+                const categoryTotals = expenseData.map(item => item.total);
+
+                // Paleta de colores extensa (puedes personalizar los tonos)
+                const colorPalette = [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                    '#FF9F40', '#00CC99', '#FF99CC', '#66FF66', '#C71585'
+                ];
+
+                new Chart(document.getElementById('categoryChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: categoryLabels,
+                        datasets: [{
+                            data: categoryTotals,
+                            backgroundColor: colorPalette.slice(0, categoryLabels.length), // Toma los colores necesarios
+                            borderColor: '#FFFFFF', // Borde blanco
+                            borderWidth: 2,
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                position: 'right', // Leyenda a la derecha
+                                labels: {
+                                    padding: 10,
+                                    font: {
+                                        size: 12,
+                                    },
+                                    usePointStyle: true, // Íconos circulares
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => ` $${ctx.parsed.toLocaleString('es-CL')}`
+                                }
+                            }
+                        },
+                        cutout: '60%', // Grosor del doughnut
+                    }
+                });
+
+
+
+
+
+
+                // Gráfico de tendencias (Líneas)
+                const trendData = JSON.parse(document.getElementById('trend-data').textContent);
+
+                // Agrupar y sumar por mes y tipo
+                const groupedData = trendData.reduce((acc, { month, categoria__type, total }) => {
+                    if (!acc[month]) acc[month] = { income: 0, expense: 0 };
+                    const amount = parseFloat(total);
+                    if (categoria__type === 'income') {
+                        acc[month].income += total;
+                    } else {
+                        acc[month].expense += total;
+                    }
+                    return acc;
+                }, {});
+
+                // Ordenar meses y extraer datos
+                const sortedMonths = Object.keys(groupedData).sort((a, b) => a.localeCompare(b));
+                const incomeValues = sortedMonths.map(month => groupedData[month].income);
+                const expenseValues = sortedMonths.map(month => groupedData[month].expense);
+
+                new Chart(document.getElementById('trendChart'), {
+                    type: 'line',
+                    data: {
+                        labels: sortedMonths.map(month => {
+                            const [year, m] = month.split('-');
+                            return new Date(year, m - 1).toLocaleDateString('es-CL', {
+                                month: 'short',
+                                year: 'numeric'
+                            }).replace('.', '');
+                        }),
+                        datasets: [
+                            {
+                                label: 'Ingresos',
+                                data: incomeValues,
+                                borderColor: '#10B981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)', // Fondo degradado
+                                borderWidth: 3,
+                                tension: 0.4, // Curva suavizada
+                                fill: true,
+                                pointRadius: 5,
+                                pointHoverRadius: 7
+                            },
+                            {
+                                label: 'Gastos',
+                                data: expenseValues,
+                                borderColor: '#EF4444',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)', // Fondo degradado
+                                borderWidth: 3,
+                                tension: 0.4,
+                                fill: true,
+                                pointRadius: 5,
+                                pointHoverRadius: 7
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top', // Leyenda arriba
+                                labels: {
+                                    padding: 15,
+                                    font: { size: 14 }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: '#1F2937',
+                                titleFont: { size: 16 },
+                                bodyFont: { size: 14 },
+                                callbacks: {
+                                    label: (ctx) => ` $${ctx.parsed.y.toLocaleString('es-CL')}`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false }, // Sin líneas verticales
+                                ticks: {
+                                    font: { size: 12 },
+                                    maxRotation: 0 // Evita rotación de labels
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: (value) => `$${value.toLocaleString('es-CL')}`,
+                                    font: { size: 12 }
+                                },
+                                grid: { color: '#E5E7EB' } // Líneas horizontales suaves
+                            }
+                        }
+                    }
+                });
+
+
+                const dailyTrendData = JSON.parse(document.getElementById('daily-trend-data').textContent);
+
+                // Agrupa por día y tipo
+                const groupedDailyData = dailyTrendData.reduce((acc, { day, categoria__type, total }) => {
+                    if (!acc[day]) acc[day] = { income: 0, expense: 0 };
+                    if (categoria__type === 'income') {
+                        acc[day].income += total;
+                    } else {
+                        acc[day].expense += total;
+                    }
+                    return acc;
+                }, {});
+
+                // Ordena los días y extrae datos
+                const sortedDays = Object.keys(groupedDailyData).sort((a, b) => a.localeCompare(b));
+                const dailyIncome = sortedDays.map(day => groupedDailyData[day].income);
+                const dailyExpense = sortedDays.map(day => groupedDailyData[day].expense);
+
+                // Crea el gráfico
+                new Chart(document.getElementById('dailyTrendChart'), {
+                    type: 'line',
+                    data: {
+                        labels: sortedDays.map(day =>
+                            new Date(day).toLocaleDateString('es-CL', {
+                                day: 'numeric',
+                                month: 'short'
+                            })
+                        ),
+                        datasets: [
+                            {
+                                label: 'Ingresos',
+                                data: dailyIncome,
+                                borderColor: '#10B981',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                pointRadius: 3
+                            },
+                            {
+                                label: 'Gastos',
+                                data: dailyExpense,
+                                borderColor: '#EF4444',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                pointRadius: 3
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            x: {
+                                ticks: {
+                                    maxTicksLimit: 15 // Muestra solo 15 etiquetas para evitar saturación
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: (value) => `$${value.toLocaleString('es-CL')}`
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+
+
+        </script>
+    </div>
+</body>
+
+</html>

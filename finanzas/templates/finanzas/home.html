@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inicio - Gestión Financiera</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md text-center">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Bienvenido a tu Gestor Financiero</h1>
+        <div class="space-y-4">
+            <a href="admin/" class="block bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 transition">
+                Panel de Administración
+            </a>
+            <a href="{% url 'transaction_list' %}"
+                class="block bg-green-500 text-white px-6 py-3 rounded hover:bg-green-600 transition">
+                Ver Transacciones
+            </a>
+            <a href="{% url 'reports' %}"
+                class="block bg-purple-500 text-white px-6 py-3 rounded hover:bg-purple-600 transition">
+                Reportes Financieros
+            </a>
+        </div>
+    </div>
+</body>
+
+</html>
